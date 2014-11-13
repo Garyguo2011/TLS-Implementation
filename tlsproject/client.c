@@ -134,9 +134,10 @@ int main(int argc, char **argv) {
 	// YOUR CODE HERE
 	// IMPLEMENT THE TLS HANDSHAKE
 	hello_message* client_hello_message;
+	int client_random = random_int();
 	client_hello_message = (hello_message*) malloc(sizeof(hello_message));
 	client_hello_message->type = CLIENT_HELLO;
-	client_hello_message->random = random_int();
+	client_hello_message->random = client_random;
 	client_hello_message->cipher_suite = TLS_RSA_WITH_AES_128_ECB_SHA256;
 	send_tls_message(sockfd, client_hello_message, sizeof(hello_message));
 	hello_message server_hello_message;
@@ -187,7 +188,7 @@ int main(int argc, char **argv) {
 	ps_msg *encrypted_ps_message;
 	encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
 	encrypted_ps_message->type = PREMASTER_SECRET;
-	mpz_get_str(encrypted_ps_message->ps, 16, premaster_secret_encrypted);
+	mpz_get_ascii(encrypted_ps_message->ps, premaster_secret_encrypted);
 	send_tls_message(sockfd, encrypted_ps_message, sizeof(ps_msg));
 	
 	ps_msg encrypted_server_ms_message;
@@ -292,8 +293,6 @@ out:
 	mpz_clear(premaster_secret_mpz);
 	mpz_clear(decrypted_ms);
 	mpz_clear(master_secret_mpz);
-	mpz_clear(certificate);
-	mpz_clear(premaster);
 	return 0;
 }
 
@@ -316,6 +315,7 @@ decrypt_cert(mpz_t decrypted_cert, cert_message *cert, mpz_t key_exp, mpz_t key_
 	mpz_init(certificate);
 	mpz_set_str(certificate, cert->cert, 16);
 	perform_rsa(decrypted_cert, certificate, key_exp, key_mod);
+	mpz_clear(certificate);
 }
 
 /*
@@ -337,6 +337,7 @@ decrypt_verify_master_secret(mpz_t decrypted_ms, ps_msg *ms_ver, mpz_t key_exp, 
 	mpz_init(premaster);
 	mpz_set_str(premaster, ms_ver->ps, 16);
 	perform_rsa(decrypted_ms, premaster, key_exp, key_mod);
+	mpz_clear(premaster);
 }
 
 /*
@@ -375,6 +376,7 @@ int
 send_tls_message(int socketno, void *msg, int msg_len)
 {
 	// YOUR CODE HERE
+	int n = 0;
 	n = write(socketno, msg, (size_t) msg_len);
 	if (n < 0){
 	 	return ERR_FAILURE;
@@ -428,7 +430,7 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
  *
  * \param result         a field to populate with the result of your RSA calculation.
  * \param message        the message to perform RSA on. (probably a cert in this case)
- * \param e              the encryption key from the key_file passed in through the
+ * \param d              the encryption key from the key_file passed in through the
  *                       command-line arguments
  * \param n              the modulus for RSA from the modulus_file passed in through
  *                       the command-line arguments
@@ -436,7 +438,7 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
  * Fill in this function with your proj0 solution or see staff solutions.
  */
 static void
-perform_rsa(mpz_t result, mpz_t message, mpz_t e, mpz_t n)
+perform_rsa(mpz_t result, mpz_t message, mpz_t d, mpz_t n)
 {
 	int hex = 16;
 	mpz_t zero, one, two, tmp;
