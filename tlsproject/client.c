@@ -179,16 +179,16 @@ int main(int argc, char **argv) {
 	mpz_init(server_public_key_modulus);
 	mpz_init(premaster_secret_mpz);
 	char premaster[16];
-    sprintf(premaster, "%d", premaster_secret);
-    mpz_set_str(premaster_secret_mpz, premaster, 10);
-    get_cert_exponent(server_public_key_exponent, server_certificate.cert);
-    get_cert_modulus(server_public_key_modulus, server_certificate.cert);
-    perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
-    ps_msg *encrypted_ps_message;
-    encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
-    encrypted_ps_message->type = PREMASTER_SECRET;
-    mpz_get_str(encrypted_ps_message->ps, 16, premaster_secret_encrypted);
-    send_tls_message(sockfd, encrypted_ps_message, sizeof(ps_msg));
+	sprintf(premaster, "%d", premaster_secret);
+	mpz_set_str(premaster_secret_mpz, premaster, 10);
+	get_cert_exponent(server_public_key_exponent, server_certificate.cert);
+	get_cert_modulus(server_public_key_modulus, server_certificate.cert);
+	perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
+	ps_msg *encrypted_ps_message;
+	encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
+	encrypted_ps_message->type = PREMASTER_SECRET;
+	mpz_get_str(encrypted_ps_message->ps, 16, premaster_secret_encrypted);
+	send_tls_message(sockfd, encrypted_ps_message, sizeof(ps_msg));
 	
 	ps_msg encrypted_server_ms_message;
 	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
@@ -391,9 +391,6 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 {
 	// YOUR CODE HERE
 	// Need to deal with the case that receive message is ERROR message
-	if (msg_type != msg->type){
-		return ERR_FAILURE;
-	}
 	int n = 0;
 	// Mesage length probabaly large than MAX_REc
 	// Need while loop here
@@ -407,9 +404,13 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 	 	remain_bytes -= MAX_RECEIVE_BYTES;
 	 	msg_ptr += MAX_RECEIVE_BYTES;
 	}
-	n = read(socketno, msg_ptr, remain_bytes)
+	n = read(socketno, msg_ptr, remain_bytes);
 	if (n < 0){
 	 	return ERR_FAILURE;
+	}
+	int *msg_type_int = msg;
+	if (msg_type != *msg_type_int) {
+		return ERR_FAILURE;
 	}
 	return ERR_OK;
 }
