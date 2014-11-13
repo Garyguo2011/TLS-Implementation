@@ -141,7 +141,8 @@ int main(int argc, char **argv) {
 	send_tls_message(sockfd, client_hello_message, sizeof(hello_message));
 	hello_message server_hello_message;
 	memset(&server_hello_message, 0, sizeof(hello_message));
-	receive_tls_message(sockfd, &server_hello_message, SERVER_HELLO);
+	receive_tls_message(sockfd, &server_hello_message, sizeof(hello_message), SERVER_HELLO);
+	int server_random = server_hello_message.random;
 	/* error handling (To be continued) */
 
 	mpz_t *client_certificate_mpz;
@@ -159,7 +160,7 @@ int main(int argc, char **argv) {
 	send_tls_message(sockfd, client_certificate, CLIENT_CERTIFICATE);
 	cert_message server_certificate;
 	memset(&server_certificate, 0, sizeof(cert_message));
-	receive_tls_message(sockfd, &server_certificate, SERVER_CERTIFICATE);
+	receive_tls_message(sockfd, &server_certificate, sizeof(cert_message), SERVER_CERTIFICATE);
 	// May need to verify whether we connect to the correct server(i.e.torus.ce.berkeley.edu).
 	int premaster_secret = random_int(); //Make sure that premaster_secret is generated randomly
 
@@ -172,17 +173,41 @@ int main(int argc, char **argv) {
 	decrypted_cert(decrypted_certificate, server_certificate.cert, ca_exponent, ca_modulus);
 	// Don't know if decrypted_certificate is the public key
 
-	mpz_t server_public_key, premaster_secret_mpz;
-	mpz_init(server_public_key);
+	mpz_t premaster_secret_encrypted, server_public_key_exponent, server_public_key_modulus, premaster_secret_mpz;
+	mpz_init(premaster_secret_encrypted);
+	mpz_init(server_public_key_exponent);
+	mpz_init(server_public_key_modulus);
 	mpz_init(premaster_secret_mpz);
 	char premaster[16];
     sprintf(premaster, "%d", premaster_secret);
     mpz_set_str(premaster_secret_mpz, premaster, 10);
-    perform_rsa()
-
-
+    get_cert_exponent(server_public_key_exponent, server_certificate.cert);
+    get_cert_modulus(server_public_key_modulus, server_certificate.cert);
+    perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
+    ps_msg *encrypted_ps_message;
+    encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
+    encrypted_ps_message->type = PREMASTER_SECRET;
+    mpz_get_str(encrypted_ps_message->ps, 16, premaster_secret_encrypted);
+    send_tls_message(sockfd, encrypted_ps_message, sizeof(ps_msg));
 	
+	ps_msg encrypted_server_ms_message;
+	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
+	receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
 
+	mpz_t decrypted_ms;
+	mpz_init(decrypted_ms);
+	decrypt_verify_master_secret(decrypted_ms, &encrypted_server_ms_message, client_exp, client_mod);
+	char *master_secret;
+	master_secret = (char*) malloc(sizeof(char)*SHA_BLOCK_SIZE);
+	compute_master_secret(premaster_secret, client_random, server_random, master_secret);
+	mpz_t master_secret_mpz;
+	mpz_init(master_secret_mpz);
+	mpz_set_str(master_secret_mpz, master_secret, 16);
+	int result = mpz_cmp(master_secret_mpz, decrypted_ms);
+	if (result != 0) {
+		perror("Decrypted server master secret doesn't match computed master secret!");
+		cleanup();
+	}
 	/*
 	 * START ENCRYPTED MESSAGES
 	 */
@@ -199,8 +224,8 @@ int main(int argc, char **argv) {
 	
 	// YOUR CODE HERE
 	// SET AES KEYS
-	//aes_setkey_enc()
-	//aes_setkey_dec()
+	aes_setkey_enc(&enc_ctx, master_secret, AES_BLOCK_SIZE);
+	aes_setkey_dec(&dec_ctx, master_secret, AES_BLOCK_SIZE);
 
 	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 	/* Send and receive data. */
