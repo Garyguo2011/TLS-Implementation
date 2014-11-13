@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
 	int server_random = server_hello_message.random;
 	/* error handling (To be continued) */
 
-	mpz_t *client_certificate_mpz;
+	mpz_t client_certificate_mpz;
 	int byte_read;
 	mpz_init(client_certificate_mpz);
 	byte_read = mpz_inp_str(client_certificate_mpz, c_file, 0); //Check whether 0 means default.
@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
 	mpz_init(ca_modulus);
 	mpz_set_str(ca_exponent, CA_EXPONENT, 16);
 	mpz_set_str(ca_modulus, CA_MODULUS, 16);
-	decrypted_cert(decrypted_certificate, server_certificate.cert, ca_exponent, ca_modulus);
+	decrypt_cert(decrypted_certificate, &server_certificate, ca_exponent, ca_modulus);
 	// Don't know if decrypted_certificate is the public key
 
 	mpz_t premaster_secret_encrypted, server_public_key_exponent, server_public_key_modulus, premaster_secret_mpz;
@@ -352,15 +352,15 @@ decrypt_verify_master_secret(mpz_t decrypted_ms, ps_msg *ms_ver, mpz_t key_exp, 
 void
 compute_master_secret(int ps, int client_random, int server_random, char *master_secret)
 {
-	SHA256_CTX *ctx;
-	sha256_init(ctx);
+	SHA256_CTX ctx;
+	sha256_init(&ctx);
 	unsigned char data[4*sizeof(int)];
 	memcpy(data, &ps, sizeof(int));
 	memcpy(data+sizeof(int), &client_random, sizeof(int));
 	memcpy(data+2*sizeof(int), &server_random, sizeof(int));
 	memcpy(data+3*sizeof(int), &ps, sizeof(int));
-	sha256_update(ctx, data, 4*sizeof(int));
-	sha256_final(ctx, master_secret);
+	sha256_update(&ctx, data, 4*sizeof(int));
+	sha256_final(&ctx, master_secret);
 }
 
 /*
