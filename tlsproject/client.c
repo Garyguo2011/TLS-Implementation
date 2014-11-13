@@ -253,7 +253,7 @@ int main(int argc, char **argv) {
 
 	}
 
- out:
+out:
 	close(sockfd);
 	return 0;
 }
@@ -326,8 +326,6 @@ compute_master_secret(int ps, int client_random, int server_random, char *master
 	memcpy(data+3*sizeof(int), &ps, sizeof(int));
 	sha256_update(ctx, data, 4*sizeof(int));
 	sha256_final(ctx, master_secret);
-
-
 }
 
 /*
