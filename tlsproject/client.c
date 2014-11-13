@@ -280,13 +280,22 @@ int main(int argc, char **argv) {
 
 out:
 	close(sockfd);
+	mpz_clear(client_exp);
+	mpz_clear(client_mod);
+	mpz_clear(client_certificate_mpz);
+	mpz_clear(decrypted_certificate);
+	mpz_clear(ca_exponent);
+	mpz_clear(ca_modulus);
+	mpz_clear(premaster_secret_encrypted);
+	mpz_clear(server_public_key_exponent);
+	mpz_clear(server_public_key_modulus);
+	mpz_clear(premaster_secret_mpz);
+	mpz_clear(decrypted_ms);
+	mpz_clear(master_secret_mpz);
+	mpz_clear(certificate);
+	mpz_clear(premaster);
 	return 0;
 }
-void
-encrypt_premaster_secret(char* result,char* server_certificate, int premaster_secret){
-
-}
-
 
 /*
  * \brief                  Decrypts the certificate in the message cert.
