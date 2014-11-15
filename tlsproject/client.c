@@ -21,6 +21,8 @@ static void kill_handler(int signum);
 static int random_int();
 static void cleanup();
 
+unsigned long long assign_to_long(unsigned char* val_array);
+
 int main(int argc, char **argv) {
 	int err, option_index, c, clientlen, counter;
 	unsigned char rcv_plaintext[AES_BLOCK_SIZE];
@@ -133,82 +135,149 @@ int main(int argc, char **argv) {
 
 	// YOUR CODE HERE
 	// IMPLEMENT THE TLS HANDSHAKE
-	hello_message* client_hello_message;
-	int client_random = random_int();
-	client_hello_message = (hello_message*) malloc(sizeof(hello_message));
-	client_hello_message->type = CLIENT_HELLO;
-	client_hello_message->random = client_random;
-	client_hello_message->cipher_suite = TLS_RSA_WITH_AES_128_ECB_SHA256;
-	send_tls_message(sockfd, client_hello_message, sizeof(hello_message));
+	// ********************************************************************
+	// ********************************************************************
+	// ********************************************************************
+	
+	// Whenever send or receive, need to check this feedback
+	int feedback;
+
+	//  =============== [Send] Client Hello =======================
+	hello_message client_hello_message;
+	int client_random;
+	int server_random;
+	memset(&client_hello_message, 0, sizeof(hello_message));
+
+	client_random = random_int();
+	client_hello_message.type = CLIENT_HELLO;
+	client_hello_message.random = client_random;
+	client_hello_message.cipher_suite = TLS_RSA_WITH_AES_128_ECB_SHA256;
+	feedback = send_tls_message(sockfd, &client_hello_message, sizeof(hello_message));
+	if (feedback != ERR_OK){
+		perror("[CLIENT_HELLO]: can't send tls message");
+		cleanup();	
+	}
+
+	//  =============== [Receive] Sever Hello =======================
 	hello_message server_hello_message;
 	memset(&server_hello_message, 0, sizeof(hello_message));
-	receive_tls_message(sockfd, &server_hello_message, sizeof(hello_message), SERVER_HELLO);
-	int server_random = server_hello_message.random;
-	/* error handling (To be continued) */
+	feedback = receive_tls_message(sockfd, &server_hello_message, sizeof(hello_message), SERVER_HELLO);
+	if (feedback != ERR_OK){
+		perror("[SERVER_HELLO]: can't receive tls message");
+		cleanup();		
+	}
+	server_random = server_hello_message.random;
 
+	//  =============== [Send] Client Certificate ================
 	mpz_t client_certificate_mpz;
+	cert_message client_certificate;
 	int byte_read;
+
 	mpz_init(client_certificate_mpz);
+	memset(&client_certificate, 0, sizeof(cert_message));
+
 	byte_read = mpz_inp_str(client_certificate_mpz, c_file, 0); //Check whether 0 means default.
 	if (byte_read <= 0) {
 		perror("Could not read client certificate");
 		cleanup();
 	}
-	cert_message *client_certificate;
-	client_certificate = (cert_message*) malloc(sizeof(cert_message));
-	client_certificate->type = CLIENT_CERTIFICATE;
-	mpz_get_ascii(client_certificate->cert, client_certificate_mpz);
-	send_tls_message(sockfd, client_certificate, CLIENT_CERTIFICATE);
-	cert_message server_certificate;
-	memset(&server_certificate, 0, sizeof(cert_message));
-	receive_tls_message(sockfd, &server_certificate, sizeof(cert_message), SERVER_CERTIFICATE);
-	// May need to verify whether we connect to the correct server(i.e.torus.ce.berkeley.edu).
-	int premaster_secret = random_int(); //Make sure that premaster_secret is generated randomly
+	client_certificate.type = CLIENT_CERTIFICATE;
+	mpz_get_ascii(client_certificate.cert, client_certificate_mpz);
+	feedback = send_tls_message(sockfd, &client_certificate, CERT_MSG_SIZE);
+	if (feedback != ERR_OK){
+		perror("[CLIENT CERTIFICATE]: can't send tls message");
+		cleanup();
+	}
 
-	mpz_t decrypted_certificate, ca_exponent, ca_modulus;
-	mpz_init(decrypted_certificate);
+	//  =============== [Receive] Server Certificate ================
+	cert_message server_certificate;
+	mpz_t decrypted_sever_cert_mpz;
+	mpz_t ca_exponent;
+	mpz_t ca_modulus;
+	mpz_t server_public_key_exponent;
+	mpz_t server_public_key_modulus;
+	char decrypted_server_cert [RSA_MAX_LEN];
+
+	memset(&server_certificate, 0, sizeof(cert_message));
+	mpz_init(decrypted_sever_cert_mpz);
 	mpz_init(ca_exponent);
 	mpz_init(ca_modulus);
-	mpz_set_str(ca_exponent, CA_EXPONENT, 16);
-	mpz_set_str(ca_modulus, CA_MODULUS, 16);
-	decrypt_cert(decrypted_certificate, &server_certificate, ca_exponent, ca_modulus);
-	// Don't know if decrypted_certificate is the public key
-
-	mpz_t premaster_secret_encrypted, server_public_key_exponent, server_public_key_modulus, premaster_secret_mpz;
-	mpz_init(premaster_secret_encrypted);
 	mpz_init(server_public_key_exponent);
 	mpz_init(server_public_key_modulus);
-	mpz_init(premaster_secret_mpz);
+	memset(decrypted_server_cert, 0, RSA_MAX_LEN);
+
+	feedback = receive_tls_message(sockfd, &server_certificate, sizeof(cert_message), SERVER_CERTIFICATE);
+	if (feedback != ERR_OK){
+		perror("[SERVER CERTIFICATE]: can't receive tls message");
+		cleanup();
+	}
+	// May need to verify whether we connect to the correct server(i.e.torus.ce.berkeley.edu).
+	// Decrypt Server Certificate
+	mpz_set_str(ca_exponent, CA_EXPONENT, 16);
+	mpz_set_str(ca_modulus, CA_MODULUS, 16);
+	decrypt_cert(decrypted_sever_cert_mpz, &server_certificate, ca_exponent, ca_modulus);
+	mpz_get_ascii(decrypted_server_cert, decrypted_sever_cert_mpz);                         // Convert mpz to char array
+	get_cert_exponent(server_public_key_exponent, decrypted_server_cert);
+	get_cert_modulus(server_public_key_modulus, decrypted_server_cert);
+
+	//  =============== [Send] E_server_public_key (Premaster Secret) ================
+	// Construct encrypted(premaster secret)
+	mpz_t premaster_secret_encrypted;
+	mpz_t premaster_secret_mpz;
+	int premaster_secret;
 	char premaster[16];
+	ps_msg encrypted_ps_message;
+
+	mpz_init(premaster_secret_encrypted);
+	mpz_init(premaster_secret_mpz);	
+	memset(&encrypted_ps_message, 0, sizeof(ps_msg));
+	
+	// Generate and Covert Premaster Secret to mpz
+	premaster_secret = random_int();
 	sprintf(premaster, "%d", premaster_secret);
 	mpz_set_str(premaster_secret_mpz, premaster, 10);
-	get_cert_exponent(server_public_key_exponent, server_certificate.cert);
-	get_cert_modulus(server_public_key_modulus, server_certificate.cert);
 	perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
-	ps_msg *encrypted_ps_message;
-	encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
-	encrypted_ps_message->type = PREMASTER_SECRET;
-	mpz_get_ascii(encrypted_ps_message->ps, premaster_secret_encrypted);
-	send_tls_message(sockfd, encrypted_ps_message, sizeof(ps_msg));
+	encrypted_ps_message.type = PREMASTER_SECRET;
+	mpz_get_ascii(encrypted_ps_message.ps, premaster_secret_encrypted);
+	feedback = send_tls_message(sockfd, &encrypted_ps_message, sizeof(ps_msg));
+	if (feedback != ERR_OK) {
+		perror("[E_server_public_key (Premaster secret)]: can't send tls message");
+		cleanup();
+	}
 	
+	//  =============== [Receive] E_client_public_key (Master Secret) ================
 	ps_msg encrypted_server_ms_message;
-	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
-	receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
-
 	mpz_t decrypted_ms;
-	mpz_init(decrypted_ms);
-	decrypt_verify_master_secret(decrypted_ms, &encrypted_server_ms_message, client_exp, client_mod);
-	char *master_secret;
-	master_secret = (char*) malloc(sizeof(char)*SHA_BLOCK_SIZE);
-	compute_master_secret(premaster_secret, client_random, server_random, master_secret);
+	unsigned long long master_secret_long;
+	unsigned char master_secret[SHA_BLOCK_SIZE];
+	char master_secret_str[16];
 	mpz_t master_secret_mpz;
+
+	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
+	mpz_init(decrypted_ms);
+	memset(master_secret, 0, SHA_BLOCK_SIZE);
+	memset(master_secret_str, 0, 16);
 	mpz_init(master_secret_mpz);
-	mpz_set_str(master_secret_mpz, master_secret, 16);
+
+	feedback = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
+	if (feedback != ERR_OK) {
+		perror("[E_client_public_key (master secret)]: can't receive tls message");
+		cleanup();
+	}
+	// decrypt E_client_public_key (Master Secret)
+	decrypt_verify_master_secret(decrypted_ms, &encrypted_server_ms_message, client_exp, client_mod);
+	compute_master_secret(premaster_secret, client_random, server_random, master_secret);
+	master_secret_long = assign_to_long(master_secret);
+	sprintf(master_secret_str, "%llu", master_secret_long);
+	mpz_set_str(master_secret_mpz, master_secret, 10);
 	int result = mpz_cmp(master_secret_mpz, decrypted_ms);
 	if (result != 0) {
 		perror("Decrypted server master secret doesn't match computed master secret!");
 		cleanup();
 	}
+	// ********************************************************************
+	// ********************************************************************
+	// ********************************************************************
 	/*
 	 * START ENCRYPTED MESSAGES
 	 */
@@ -284,7 +353,7 @@ out:
 	mpz_clear(client_exp);
 	mpz_clear(client_mod);
 	mpz_clear(client_certificate_mpz);
-	mpz_clear(decrypted_certificate);
+	mpz_clear(decrypted_sever_cert_mpz);
 	mpz_clear(ca_exponent);
 	mpz_clear(ca_modulus);
 	mpz_clear(premaster_secret_encrypted);
@@ -360,7 +429,7 @@ compute_master_secret(int ps, int client_random, int server_random, char *master
 	memcpy(data+2*sizeof(int), &server_random, sizeof(int));
 	memcpy(data+3*sizeof(int), &ps, sizeof(int));
 	sha256_update(&ctx, data, 4*sizeof(int));
-	sha256_final(&ctx, master_secret);
+	sha256_final(&ctx, (unsigned char*) master_secret);
 }
 
 /*
@@ -614,4 +683,15 @@ cleanup()
 {
 	close(sockfd);
 	exit(1);
+}
+
+// ====================== Additional Function ============================
+unsigned long long assign_to_long(unsigned char* val_array){
+	unsigned long long val = 0;
+	int i;
+	for (i = 0; i < SHA_BLOCK_SIZE; i ++){
+		val <<= 8;
+		val += (unsigned long long) val_array[i];
+	}
+	return val;
 }
