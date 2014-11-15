@@ -45,7 +45,6 @@ int main(int argc, char **argv) {
 	mpz_init(client_exp);
 	mpz_init(client_mod);
 
-
 	/*
 	 * This section is networking code that you don't need to worry about.
 	 * Look further down in the function for your part.
@@ -124,7 +123,6 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
-
 	memset(&server_addr, 0, sizeof(struct sockaddr_in));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = ip_addr;
@@ -137,8 +135,6 @@ int main(int argc, char **argv) {
 
 	// YOUR CODE HERE
 	// IMPLEMENT THE TLS HANDSHAKE
-	int send_message_int, receive_messge_int;
-	/* error handling (To be continued) */
 	// ********************************************************************
 	// ********************************************************************
 	// ********************************************************************
@@ -171,19 +167,22 @@ int main(int argc, char **argv) {
 		cleanup();		
 	}
 	server_random = server_hello_message.random;
-	printf("server_random: %d\n", server_random);
-
 
 	//  =============== [Send] Client Certificate ================
 	mpz_t client_certificate_mpz;
 	cert_message client_certificate;
 	int byte_read;
+
 	mpz_init(client_certificate_mpz);
-	// May need to verify whether we connect to the correct server(i.e.torus.ce.berkeley.edu).
 	memset(&client_certificate, 0, sizeof(cert_message));
+
+	byte_read = mpz_inp_str(client_certificate_mpz, c_file, 0); //Check whether 0 means default.
+	if (byte_read <= 0) {
+		perror("Could not read client certificate");
+		cleanup();
+	}
 	client_certificate.type = CLIENT_CERTIFICATE;
-	fread(client_certificate.cert, RSA_MAX_LEN, 1, c_file);
-	printf("Client Certificate: %s\n", client_certificate.cert);
+	mpz_get_ascii(client_certificate.cert, client_certificate_mpz);
 	feedback = send_tls_message(sockfd, &client_certificate, CERT_MSG_SIZE);
 	if (feedback != ERR_OK){
 		perror("[CLIENT CERTIFICATE]: can't send tls message");
@@ -214,14 +213,12 @@ int main(int argc, char **argv) {
 	}
 	// May need to verify whether we connect to the correct server(i.e.torus.ce.berkeley.edu).
 	// Decrypt Server Certificate
-	mpz_set_str(ca_exponent, CA_EXPONENT, 0);
-	mpz_set_str(ca_modulus, CA_MODULUS, 0);
+	mpz_set_str(ca_exponent, CA_EXPONENT, 16);
+	mpz_set_str(ca_modulus, CA_MODULUS, 16);
 	decrypt_cert(decrypted_sever_cert_mpz, &server_certificate, ca_exponent, ca_modulus);
-	mpz_get_ascii(decrypted_server_cert, decrypted_sever_cert_mpz);                       // Convert mpz to char array
-	printf("decrypted_server_cert: %s\n", decrypted_server_cert);
+	mpz_get_ascii(decrypted_server_cert, decrypted_sever_cert_mpz);                         // Convert mpz to char array
 	get_cert_exponent(server_public_key_exponent, decrypted_server_cert);
 	get_cert_modulus(server_public_key_modulus, decrypted_server_cert);
-
 
 	//  =============== [Send] E_server_public_key (Premaster Secret) ================
 	// Construct encrypted(premaster secret)
@@ -230,6 +227,7 @@ int main(int argc, char **argv) {
 	int premaster_secret;
 	char premaster[16];
 	ps_msg encrypted_ps_message;
+
 	mpz_init(premaster_secret_encrypted);
 	mpz_init(premaster_secret_mpz);	
 	memset(&encrypted_ps_message, 0, sizeof(ps_msg));
@@ -237,20 +235,7 @@ int main(int argc, char **argv) {
 	// Generate and Covert Premaster Secret to mpz
 	premaster_secret = random_int();
 	sprintf(premaster, "%d", premaster_secret);
-	mpz_set_str(premaster_secret_mpz, premaster, 16);
-	// perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
-	// ps_msg *encrypted_ps_message;
-	// encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
-	// encrypted_ps_message->type = PREMASTER_SECRET;
-	// mpz_get_ascii(encrypted_ps_message->ps, premaster_secret_encrypted);
-	// send_tls_message(sockfd, encrypted_ps_message, sizeof(ps_msg));
-	// ps_msg encrypted_server_ms_message;
-	// memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
-	// receive_messge_int = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
-	// if (receive_messge_int == ERR_FAILURE) {
-	// 	perror("Could not get the master secret");
-	// 	cleanup();
-	// }
+	mpz_set_str(premaster_secret_mpz, premaster, 10);
 	perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
 	encrypted_ps_message.type = PREMASTER_SECRET;
 	mpz_get_ascii(encrypted_ps_message.ps, premaster_secret_encrypted);
@@ -273,6 +258,7 @@ int main(int argc, char **argv) {
 	memset(master_secret, 0, SHA_BLOCK_SIZE);
 	memset(master_secret_str, 0, 16);
 	mpz_init(master_secret_mpz);
+
 	feedback = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
 	if (feedback != ERR_OK) {
 		perror("[E_client_public_key (master secret)]: can't receive tls message");
@@ -285,10 +271,10 @@ int main(int argc, char **argv) {
 	sprintf(master_secret_str, "%llu", master_secret_long);
 	mpz_set_str(master_secret_mpz, master_secret, 10);
 	int result = mpz_cmp(master_secret_mpz, decrypted_ms);
-	// if (result != 0) {
-	// 	perror("Decrypted server master secret doesn't match computed master secret!");
-	// 	cleanup();
-	// }
+	if (result != 0) {
+		perror("Decrypted server master secret doesn't match computed master secret!");
+		cleanup();
+	}
 	// ********************************************************************
 	// ********************************************************************
 	// ********************************************************************
@@ -396,7 +382,7 @@ decrypt_cert(mpz_t decrypted_cert, cert_message *cert, mpz_t key_exp, mpz_t key_
 {
 	mpz_t certificate;
 	mpz_init(certificate);
-	mpz_set_str(certificate, cert->cert, 0);
+	mpz_set_str(certificate, cert->cert, 16);
 	perform_rsa(decrypted_cert, certificate, key_exp, key_mod);
 	mpz_clear(certificate);
 }
@@ -418,7 +404,7 @@ decrypt_verify_master_secret(mpz_t decrypted_ms, ps_msg *ms_ver, mpz_t key_exp, 
 {
 	mpz_t premaster;
 	mpz_init(premaster);
-	mpz_set_str(premaster, ms_ver->ps, 0);
+	mpz_set_str(premaster, ms_ver->ps, 16);
 	perform_rsa(decrypted_ms, premaster, key_exp, key_mod);
 	mpz_clear(premaster);
 }
@@ -496,12 +482,11 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 	 	remain_bytes -= MAX_RECEIVE_BYTES;
 	 	msg_ptr += MAX_RECEIVE_BYTES;
 	}
-	n = read(socketno, msg_ptr, (size_t) remain_bytes);
+	n = read(socketno, msg_ptr, remain_bytes);
 	if (n < 0){
 	 	return ERR_FAILURE;
 	}
 	int *msg_type_int = msg;
-	printf("Message Type: %d\n", *msg_type_int);
 	if (msg_type != *msg_type_int) {
 		return ERR_FAILURE;
 	}
