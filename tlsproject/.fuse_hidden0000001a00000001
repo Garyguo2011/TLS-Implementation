@@ -167,7 +167,6 @@ int main(int argc, char **argv) {
 		cleanup();		
 	}
 	server_random = server_hello_message.random;
-	printf("server_random: %d\n", server_random);
 
 	//  =============== [Send] Client Certificate ================
 	mpz_t client_certificate_mpz;
@@ -176,9 +175,14 @@ int main(int argc, char **argv) {
 
 	mpz_init(client_certificate_mpz);
 	memset(&client_certificate, 0, sizeof(cert_message));
+
+	byte_read = mpz_inp_str(client_certificate_mpz, c_file, 0); //Check whether 0 means default.
+	if (byte_read <= 0) {
+		perror("Could not read client certificate");
+		cleanup();
+	}
 	client_certificate.type = CLIENT_CERTIFICATE;
-	fread(client_certificate.cert, RSA_MAX_LEN, 1, c_file);
-	printf("Client Certificate: %s\n", client_certificate.cert);
+	mpz_get_ascii(client_certificate.cert, client_certificate_mpz);
 	feedback = send_tls_message(sockfd, &client_certificate, CERT_MSG_SIZE);
 	if (feedback != ERR_OK){
 		perror("[CLIENT CERTIFICATE]: can't send tls message");
@@ -267,10 +271,10 @@ int main(int argc, char **argv) {
 	sprintf(master_secret_str, "%llu", master_secret_long);
 	mpz_set_str(master_secret_mpz, master_secret, 10);
 	int result = mpz_cmp(master_secret_mpz, decrypted_ms);
-	// if (result != 0) {
-	// 	perror("Decrypted server master secret doesn't match computed master secret!");
-	// 	cleanup();
-	// }
+	if (result != 0) {
+		perror("Decrypted server master secret doesn't match computed master secret!");
+		cleanup();
+	}
 	// ********************************************************************
 	// ********************************************************************
 	// ********************************************************************
@@ -483,7 +487,6 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 	 	return ERR_FAILURE;
 	}
 	int *msg_type_int = msg;
-	printf("Message Type: %d\n", *msg_type_int);
 	if (msg_type != *msg_type_int) {
 		return ERR_FAILURE;
 	}
