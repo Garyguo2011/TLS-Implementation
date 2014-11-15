@@ -237,7 +237,9 @@ int main(int argc, char **argv) {
 	// Generate and Covert Premaster Secret to mpz
 	premaster_secret = random_int();
 	sprintf(premaster, "%d", premaster_secret);
-	mpz_set_str(premaster_secret_mpz, premaster, 16);
+	printf("premaster_secret: %d\n", premaster_secret);
+	printf("premaster: %s\n", premaster);
+	mpz_set_str(premaster_secret_mpz, premaster, 10);
 	// perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
 	// ps_msg *encrypted_ps_message;
 	// encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
@@ -251,9 +253,14 @@ int main(int argc, char **argv) {
 	// 	perror("Could not get the master secret");
 	// 	cleanup();
 	// }
+	gmp_printf("premaster_secret_mpz: %Zd\n", premaster_secret_mpz);
+	gmp_printf("server_public_key_exponent: %Zx\n", server_public_key_exponent);
+	gmp_printf("server_public_key_modulus: %Zx\n", server_public_key_modulus);
 	perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
 	encrypted_ps_message.type = PREMASTER_SECRET;
-	mpz_get_ascii(encrypted_ps_message.ps, premaster_secret_encrypted);
+	mpz_get_str(encrypted_ps_message.ps, 16, premaster_secret_encrypted);
+	gmp_printf("premaster_secret_encrypted: %Zx\n", premaster_secret_encrypted);
+	//printf("encrypted_ps_message: %s\n", encrypted_ps_message.ps);
 	feedback = send_tls_message(sockfd, &encrypted_ps_message, sizeof(ps_msg));
 	if (feedback != ERR_OK) {
 		perror("[E_server_public_key (Premaster secret)]: can't send tls message");
@@ -267,13 +274,12 @@ int main(int argc, char **argv) {
 	unsigned char master_secret[SHA_BLOCK_SIZE];
 	char master_secret_str[16];
 	mpz_t master_secret_mpz;
-
 	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
 	mpz_init(decrypted_ms);
 	memset(master_secret, 0, SHA_BLOCK_SIZE);
 	memset(master_secret_str, 0, 16);
 	mpz_init(master_secret_mpz);
-	feedback = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
+	feedback = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), VERIFY_MASTER_SECRET);
 	if (feedback != ERR_OK) {
 		perror("[E_client_public_key (master secret)]: can't receive tls message");
 		cleanup();
