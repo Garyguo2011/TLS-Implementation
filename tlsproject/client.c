@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
 	mpz_init(client_exp);
 	mpz_init(client_mod);
 
+
 	/*
 	 * This section is networking code that you don't need to worry about.
 	 * Look further down in the function for your part.
@@ -121,6 +122,7 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+
 	memset(&server_addr, 0, sizeof(struct sockaddr_in));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = ip_addr;
@@ -133,35 +135,61 @@ int main(int argc, char **argv) {
 
 	// YOUR CODE HERE
 	// IMPLEMENT THE TLS HANDSHAKE
+	int send_message_int, receive_messge_int;
 	hello_message* client_hello_message;
 	int client_random = random_int();
 	client_hello_message = (hello_message*) malloc(sizeof(hello_message));
 	client_hello_message->type = CLIENT_HELLO;
 	client_hello_message->random = client_random;
 	client_hello_message->cipher_suite = TLS_RSA_WITH_AES_128_ECB_SHA256;
-	send_tls_message(sockfd, client_hello_message, sizeof(hello_message));
+	send_message_int = send_tls_message(sockfd, client_hello_message, sizeof(hello_message));
+	if (send_message_int == ERR_FAILURE) {
+		perror("Could not send hello_message to the server");
+		cleanup();
+	}
 	hello_message server_hello_message;
 	memset(&server_hello_message, 0, sizeof(hello_message));
-	receive_tls_message(sockfd, &server_hello_message, sizeof(hello_message), SERVER_HELLO);
+	receive_messge_int = receive_tls_message(sockfd, &server_hello_message, sizeof(hello_message), SERVER_HELLO);
+	if (receive_messge_int == ERR_FAILURE) {
+		perror("Could not connect to the server");
+		cleanup();
+	}
 	int server_random = server_hello_message.random;
 	/* error handling (To be continued) */
 
 	mpz_t client_certificate_mpz;
 	int byte_read;
 	mpz_init(client_certificate_mpz);
-	byte_read = mpz_inp_str(client_certificate_mpz, c_file, 0); //Check whether 0 means default.
-	if (byte_read <= 0) {
-		perror("Could not read client certificate");
-		cleanup();
-	}
+	// byte_read = mpz_inp_str(client_certificate_mpz, c_file, 0); //Check whether 0 means default.
+	// if (byte_read <= 0) {
+	// 	perror("Could not read client certificate");
+	// 	cleanup();
+	// }
+
 	cert_message *client_certificate;
 	client_certificate = (cert_message*) malloc(sizeof(cert_message));
 	client_certificate->type = CLIENT_CERTIFICATE;
-	mpz_get_ascii(client_certificate->cert, client_certificate_mpz);
-	send_tls_message(sockfd, client_certificate, CLIENT_CERTIFICATE);
+	fread(client_certificate->cert, RSA_MAX_LEN, 1, c_file);
+	// gmp_printf("%Zd\n", client_certificate_mpz);
+	// printf("%d\n", client_certificate->cert);
+	// // int i = 0;
+	// // while (i < sizeof(client_certificate->cert)) {
+	// // 	printf("%d", client_certificate->cert[i]);
+	// // 	i++;
+	// // }
+	// // printf("\n");
+	send_message_int = send_tls_message(sockfd, client_certificate, sizeof(cert_message));
+	if (send_message_int == ERR_FAILURE) {
+		perror("Could not send client certificate to the server");
+		cleanup();
+	}
 	cert_message server_certificate;
 	memset(&server_certificate, 0, sizeof(cert_message));
-	receive_tls_message(sockfd, &server_certificate, sizeof(cert_message), SERVER_CERTIFICATE);
+	receive_messge_int = receive_tls_message(sockfd, &server_certificate, sizeof(cert_message), SERVER_CERTIFICATE);
+	if (receive_messge_int == ERR_FAILURE) {
+		perror("Could not get the server certificate");
+		cleanup();
+	}
 	// May need to verify whether we connect to the correct server(i.e.torus.ce.berkeley.edu).
 	int premaster_secret = random_int(); //Make sure that premaster_secret is generated randomly
 
@@ -182,18 +210,22 @@ int main(int argc, char **argv) {
 	char premaster[16];
 	sprintf(premaster, "%d", premaster_secret);
 	mpz_set_str(premaster_secret_mpz, premaster, 10);
-	get_cert_exponent(server_public_key_exponent, server_certificate.cert);
+	get_cert_exponent(server_public_key_exponent, server_certificate.cert); // Segmentation fault starts here.
 	get_cert_modulus(server_public_key_modulus, server_certificate.cert);
+	printf("I'm here 217\n");
 	perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
 	ps_msg *encrypted_ps_message;
 	encrypted_ps_message = (ps_msg*) malloc(sizeof(ps_msg));
 	encrypted_ps_message->type = PREMASTER_SECRET;
 	mpz_get_ascii(encrypted_ps_message->ps, premaster_secret_encrypted);
 	send_tls_message(sockfd, encrypted_ps_message, sizeof(ps_msg));
-	
 	ps_msg encrypted_server_ms_message;
 	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
-	receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
+	receive_messge_int = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), PREMASTER_SECRET);
+	if (receive_messge_int == ERR_FAILURE) {
+		perror("Could not get the master secret");
+		cleanup();
+	}
 
 	mpz_t decrypted_ms;
 	mpz_init(decrypted_ms);
@@ -413,11 +445,12 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 	 	remain_bytes -= MAX_RECEIVE_BYTES;
 	 	msg_ptr += MAX_RECEIVE_BYTES;
 	}
-	n = read(socketno, msg_ptr, remain_bytes);
+	n = read(socketno, msg_ptr, (size_t) remain_bytes);
 	if (n < 0){
 	 	return ERR_FAILURE;
 	}
 	int *msg_type_int = msg;
+	printf("type: %d\n", *msg_type_int);
 	if (msg_type != *msg_type_int) {
 		return ERR_FAILURE;
 	}
