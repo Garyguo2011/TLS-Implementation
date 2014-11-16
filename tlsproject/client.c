@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
 	memset(&client_certificate, 0, sizeof(cert_message));
 	client_certificate.type = CLIENT_CERTIFICATE;
 	fread(client_certificate.cert, RSA_MAX_LEN, 1, c_file);
-	printf("Client Certificate: %s\n", client_certificate.cert);
+	//printf("Client Certificate: %s\n", client_certificate.cert);
 	feedback = send_tls_message(sockfd, &client_certificate, CERT_MSG_SIZE);
 	if (feedback != ERR_OK){
 		perror("[CLIENT CERTIFICATE]: can't send tls message");
@@ -218,15 +218,14 @@ int main(int argc, char **argv) {
 	mpz_set_str(ca_modulus, CA_MODULUS, 0);
 	decrypt_cert(decrypted_sever_cert_mpz, &server_certificate, ca_exponent, ca_modulus);
 	mpz_get_ascii(decrypted_server_cert, decrypted_sever_cert_mpz);                       // Convert mpz to char array
-	printf("decrypted_server_cert: %s\n", decrypted_server_cert);
+	//printf("decrypted_server_cert: %s\n", decrypted_server_cert);
 	get_cert_exponent(server_public_key_exponent, decrypted_server_cert);
 	get_cert_modulus(server_public_key_modulus, decrypted_server_cert);
 
 
 	//  =============== [Send] E_server_public_key (Premaster Secret) ================
 	// Construct encrypted(premaster secret)
-	mpz_t premaster_secret_encrypted;
-	mpz_t premaster_secret_mpz;
+	mpz_t premaster_secret_encrypted, premaster_secret_mpz;
 	int premaster_secret;
 	char premaster[16];
 	ps_msg encrypted_ps_message;
@@ -238,7 +237,6 @@ int main(int argc, char **argv) {
 	premaster_secret = random_int();
 	sprintf(premaster, "%d", premaster_secret);
 	printf("premaster_secret: %d\n", premaster_secret);
-	printf("premaster: %s\n", premaster);
 	mpz_set_str(premaster_secret_mpz, premaster, 10);
 	// perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
 	// ps_msg *encrypted_ps_message;
@@ -253,14 +251,12 @@ int main(int argc, char **argv) {
 	// 	perror("Could not get the master secret");
 	// 	cleanup();
 	// }
-	gmp_printf("premaster_secret_mpz: %Zd\n", premaster_secret_mpz);
-	gmp_printf("server_public_key_exponent: %Zx\n", server_public_key_exponent);
-	gmp_printf("server_public_key_modulus: %Zx\n", server_public_key_modulus);
+	// gmp_printf("premaster_secret_mpz: %Zd\n", premaster_secret_mpz);
+	// gmp_printf("server_public_key_exponent: %Zx\n", server_public_key_exponent);
+	// gmp_printf("server_public_key_modulus: %Zx\n", server_public_key_modulus);
 	perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
 	encrypted_ps_message.type = PREMASTER_SECRET;
 	mpz_get_str(encrypted_ps_message.ps, 16, premaster_secret_encrypted);
-	gmp_printf("premaster_secret_encrypted: %Zx\n", premaster_secret_encrypted);
-	//printf("encrypted_ps_message: %s\n", encrypted_ps_message.ps);
 	feedback = send_tls_message(sockfd, &encrypted_ps_message, sizeof(ps_msg));
 	if (feedback != ERR_OK) {
 		perror("[E_server_public_key (Premaster secret)]: can't send tls message");
@@ -269,15 +265,14 @@ int main(int argc, char **argv) {
 	
 	//  =============== [Receive] E_client_public_key (Master Secret) ================
 	ps_msg encrypted_server_ms_message;
-	mpz_t decrypted_ms;
+	mpz_t decrypted_ms, master_secret_test, master_secret_mpz;
 	unsigned long long master_secret_long;
-	unsigned char master_secret[SHA_BLOCK_SIZE];
-	char master_secret_str[16];
-	mpz_t master_secret_mpz;
+	unsigned char master_secret[SHA_BLOCK_SIZE], master_secret_str[2*SHA_BLOCK_SIZE];
 	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
 	mpz_init(decrypted_ms);
-	memset(master_secret, 0, SHA_BLOCK_SIZE);
-	memset(master_secret_str, 0, 16);
+	mpz_init(master_secret_test);
+	//memset(master_secret, 0, SHA_BLOCK_SIZE);
+	//memset(master_secret_str, 0, SHA_BLOCK_SIZE);
 	mpz_init(master_secret_mpz);
 	feedback = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), VERIFY_MASTER_SECRET);
 	if (feedback != ERR_OK) {
@@ -287,14 +282,15 @@ int main(int argc, char **argv) {
 	// decrypt E_client_public_key (Master Secret)
 	decrypt_verify_master_secret(decrypted_ms, &encrypted_server_ms_message, client_exp, client_mod);
 	compute_master_secret(premaster_secret, client_random, server_random, master_secret);
-	master_secret_long = assign_to_long(master_secret);
-	sprintf(master_secret_str, "%llu", master_secret_long);
-	mpz_set_str(master_secret_mpz, master_secret, 10);
-	int result = mpz_cmp(master_secret_mpz, decrypted_ms);
-	// if (result != 0) {
-	// 	perror("Decrypted server master secret doesn't match computed master secret!");
-	// 	cleanup();
-	// }
+	mpz_get_ascii(master_secret_str, decrypted_ms);
+	printf("master_secret: %s\n", master_secret);
+	printf("master_secret_str: %s\n", master_secret_str);
+	printf("strcmp: %d\n", strcmp(master_secret, master_secret_str));
+	int result = strcmp(master_secret, master_secret_str);
+	if (result != 0) {
+		perror("Decrypted server master secret doesn't match computed master secret!");
+		cleanup();
+	}
 	// ********************************************************************
 	// ********************************************************************
 	// ********************************************************************
@@ -314,8 +310,8 @@ int main(int argc, char **argv) {
 	
 	// YOUR CODE HERE
 	// SET AES KEYS
-	aes_setkey_enc(&enc_ctx, master_secret, AES_BLOCK_SIZE);
-	aes_setkey_dec(&dec_ctx, master_secret, AES_BLOCK_SIZE);
+	aes_setkey_enc(&enc_ctx, master_secret, 128);
+	aes_setkey_dec(&dec_ctx, master_secret, 128);
 
 	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
 	/* Send and receive data. */
@@ -327,13 +323,15 @@ int main(int argc, char **argv) {
 		tv.tv_usec = 10;
 
 		select(sockfd+1, &readfds, NULL, NULL, &tv);
+		//printf("Ready\n");
 		if (FD_ISSET(STDIN_FILENO, &readfds)) {
 			counter = 0;
 			memset(&send_msg, 0, TLS_MSG_SIZE);
 			send_msg.type = ENCRYPTED_MESSAGE;
 			memset(send_plaintext, 0, AES_BLOCK_SIZE);
 			read_size = read(STDIN_FILENO, send_plaintext, AES_BLOCK_SIZE);
-			while (read_size > 0 && counter + AES_BLOCK_SIZE < TLS_MSG_SIZE - INT_SIZE) {
+			//printf("send_plaintext: %s\n", send_plaintext);
+			while (read_size > 0 && (unsigned int) counter + AES_BLOCK_SIZE < TLS_MSG_SIZE - INT_SIZE) {
 				if (read_size > 0) {
 					err = aes_crypt_ecb(&enc_ctx, AES_ENCRYPT, send_plaintext, send_ciphertext);
 					memcpy(send_msg.msg + counter, send_ciphertext, AES_BLOCK_SIZE);
@@ -357,7 +355,7 @@ int main(int argc, char **argv) {
 				}
 				memcpy(rcv_ciphertext, rcv_msg.msg, AES_BLOCK_SIZE);
 				counter = 0;
-				while (counter < read_size - INT_SIZE - AES_BLOCK_SIZE) {
+				while ((unsigned int) counter < read_size - INT_SIZE - AES_BLOCK_SIZE) {
 					aes_crypt_ecb(&dec_ctx, AES_DECRYPT, rcv_ciphertext, rcv_plaintext);
 					printf("%s", rcv_plaintext);
 					counter += AES_BLOCK_SIZE;
@@ -382,6 +380,7 @@ out:
 	mpz_clear(premaster_secret_mpz);
 	mpz_clear(decrypted_ms);
 	mpz_clear(master_secret_mpz);
+	mpz_clear(master_secret_test);
 	return 0;
 }
 
@@ -424,7 +423,7 @@ decrypt_verify_master_secret(mpz_t decrypted_ms, ps_msg *ms_ver, mpz_t key_exp, 
 {
 	mpz_t premaster;
 	mpz_init(premaster);
-	mpz_set_str(premaster, ms_ver->ps, 0);
+	mpz_set_str(premaster, ms_ver->ps, 16);
 	perform_rsa(decrypted_ms, premaster, key_exp, key_mod);
 	mpz_clear(premaster);
 }
@@ -443,14 +442,31 @@ compute_master_secret(int ps, int client_random, int server_random, char *master
 {
 	SHA256_CTX ctx;
 	sha256_init(&ctx);
-	unsigned char data[4*sizeof(int)];
-	memcpy(data, &ps, sizeof(int));
-	memcpy(data+sizeof(int), &client_random, sizeof(int));
-	memcpy(data+2*sizeof(int), &server_random, sizeof(int));
-	memcpy(data+3*sizeof(int), &ps, sizeof(int));
-	sha256_update(&ctx, data, 4*sizeof(int));
+	unsigned char data[sizeof(int)];
+	unsigned char data1[sizeof(int)];
+	unsigned char data2[sizeof(int)];
+	unsigned char data3[sizeof(int)];
+	char master_secret0[16], master_secret1[16], master_secret2[16], master_secret3[16];
+
+	memcpy(data, &ps, sizeof(ps));
+	sha256_update(&ctx, data, (int) sizeof(data));
+
+	memcpy(data1, &client_random, sizeof(client_random));
+	sha256_update(&ctx, data1, (int) sizeof(data1));
+
+	memcpy(data2, &server_random, sizeof(server_random));
+	sha256_update(&ctx, data2, (int) sizeof(data2));
+
+	memcpy(data3, &ps, sizeof(ps));
+	sha256_update(&ctx, data3, (int) sizeof(data3));
+	// unsigned char data[4*sizeof(int)];
+	// memcpy(data, &ps, sizeof(ps));
+	// memcpy(data+sizeof(ps), &client_random, sizeof(client_random));
+	// memcpy(data+sizeof(client_random), &server_random, sizeof(server_random));
+	// memcpy(data+sizeof(server_random), &ps, sizeof(ps));
 	sha256_final(&ctx, (unsigned char*) master_secret);
 }
+
 
 /*
  * \brief                  Sends a message to the connected server.
@@ -503,6 +519,7 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 	 	msg_ptr += MAX_RECEIVE_BYTES;
 	}
 	n = read(socketno, msg_ptr, (size_t) remain_bytes);
+	msg_ptr = NULL;
 	if (n < 0){
 	 	return ERR_FAILURE;
 	}
@@ -595,6 +612,7 @@ mpz_get_ascii(char *output_str, mpz_t input)
 	j = 0;
 	while (result_str[i] != '\0') {
 		output_str[j] = hex_to_ascii(result_str[i], result_str[i+1]);
+		//printf("%c\n", output_str[j]);
 		j += 1;
 		i += 2;
 	}
@@ -709,10 +727,12 @@ cleanup()
 // ====================== Additional Function ============================
 unsigned long long assign_to_long(unsigned char* val_array){
 	unsigned long long val = 0;
-	int i;
-	for (i = 0; i < SHA_BLOCK_SIZE; i ++){
+	int i = 0;
+	while (i < SHA_BLOCK_SIZE){
 		val <<= 8;
 		val += (unsigned long long) val_array[i];
+		i++;
 	}
 	return val;
 }
+//void convert_to_mpz_t(mpz_t result, )
