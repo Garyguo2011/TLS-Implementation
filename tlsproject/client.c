@@ -1,3 +1,4 @@
+
 /*
  * sig_client.c
  *
@@ -272,29 +273,52 @@ int main(int argc, char **argv) {
 	mpz_t decrypted_ms;
 	unsigned long long master_secret_long;
 	unsigned char master_secret[SHA_BLOCK_SIZE];
-	char master_secret_str[16];
+	// char master_secret_str[16];
 	mpz_t master_secret_mpz;
 	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
 	mpz_init(decrypted_ms);
 	memset(master_secret, 0, SHA_BLOCK_SIZE);
-	memset(master_secret_str, 0, 16);
+	// memset(master_secret_str, 0, 16);
 	mpz_init(master_secret_mpz);
 	feedback = receive_tls_message(sockfd, &encrypted_server_ms_message, sizeof(ps_msg), VERIFY_MASTER_SECRET);
 	if (feedback != ERR_OK) {
 		perror("[E_client_public_key (master secret)]: can't receive tls message");
 		cleanup();
 	}
+	// printf("%d\n", encrypted_server_ms_message.type);
+	// printf("%s\n", encrypted_server_ms_message.ps);
 	// decrypt E_client_public_key (Master Secret)
 	decrypt_verify_master_secret(decrypted_ms, &encrypted_server_ms_message, client_exp, client_mod);
 	compute_master_secret(premaster_secret, client_random, server_random, master_secret);
-	master_secret_long = assign_to_long(master_secret);
-	sprintf(master_secret_str, "%llu", master_secret_long);
-	mpz_set_str(master_secret_mpz, master_secret, 10);
+	// master_secret_long = assign_to_long(master_secret);
+	char* master_secret_str = hex_to_str(master_secret, SHA_BLOCK_SIZE);
+	mpz_set_str(master_secret_mpz, master_secret_str, 16);
+	// printf("%s\n", master_secret_str);
+	// // int i = 0;
+	// // while (i < 16){
+	// // 	printf("%02x", (unsigned int) master_secret[i]);
+	// // 	i ++;
+	// // }
+	// // printf("\nmaster_secret_long: %x\n", master_secret_long);
+	// // printf("master_secret_long: %llu\n", master_secret_long);
+	// // sprintf(master_secret_str, "%llu", master_secret_long);
+	// // printf("master_secret_str: %s\n", master_secret_str);
+	
+	// // gmp_printf("master_secret_mpz: %Zd\n", master_secret_mpz);
+	// // gmp_printf("decrypted_ms: %Zd\n", decrypted_ms);
+	// char tmp[SHA_BLOCK_SIZE];
+	// memset(tmp, 0, SHA_BLOCK_SIZE);
+	// mpz_get_str(tmp, 16, decrypted_ms);
+	// printf("%s\n", tmp);
+	gmp_printf("master_secret_mpz: %Zd\n", master_secret_mpz);
+	gmp_printf("decrypted_ms: %Zd\n", decrypted_ms);
 	int result = mpz_cmp(master_secret_mpz, decrypted_ms);
-	// if (result != 0) {
-	// 	perror("Decrypted server master secret doesn't match computed master secret!");
-	// 	cleanup();
-	// }
+	if (result != 0) {
+		perror("Decrypted server master secret doesn't match computed master secret!");
+		cleanup();
+	}
+	printf("result: %d\n", result);
+	free(master_secret_str);
 	// ********************************************************************
 	// ********************************************************************
 	// ********************************************************************
@@ -424,7 +448,7 @@ decrypt_verify_master_secret(mpz_t decrypted_ms, ps_msg *ms_ver, mpz_t key_exp, 
 {
 	mpz_t premaster;
 	mpz_init(premaster);
-	mpz_set_str(premaster, ms_ver->ps, 0);
+	mpz_set_str(premaster, ms_ver->ps, 16);
 	perform_rsa(decrypted_ms, premaster, key_exp, key_mod);
 	mpz_clear(premaster);
 }
@@ -713,6 +737,7 @@ unsigned long long assign_to_long(unsigned char* val_array){
 	for (i = 0; i < SHA_BLOCK_SIZE; i ++){
 		val <<= 8;
 		val += (unsigned long long) val_array[i];
+		// printf("%x\n", val);
 	}
 	return val;
 }
