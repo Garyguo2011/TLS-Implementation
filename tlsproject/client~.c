@@ -317,7 +317,7 @@ int main(int argc, char **argv) {
 	aes_setkey_dec(&dec_ctx, master_secret, 128);
 	// printf("1\n");
 	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
-	//printf("I'm here\n");
+	printf("I'm here\n");
 	/* Send and receive data. */
 	while (1) {
 		FD_ZERO(&readfds);
