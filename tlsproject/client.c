@@ -146,7 +146,6 @@ int main(int argc, char **argv) {
 	
 	// Whenever send or receive, need to check this feedback
 	int feedback;
-
 	//  =============== [Send] Client Hello =======================
 	hello_message client_hello_message;
 	int client_random;
@@ -172,8 +171,7 @@ int main(int argc, char **argv) {
 		cleanup();		
 	}
 	server_random = server_hello_message.random;
-	printf("server_random: %d\n", server_random);
-
+	//printf("server_random: %d\n", server_random);
 
 	//  =============== [Send] Client Certificate ================
 	mpz_t client_certificate_mpz;
@@ -237,7 +235,7 @@ int main(int argc, char **argv) {
 	// Generate and Covert Premaster Secret to mpz
 	premaster_secret = random_int();
 	sprintf(premaster, "%d", premaster_secret);
-	printf("premaster_secret: %d\n", premaster_secret);
+	// printf("premaster_secret: %d\n", premaster_secret);
 	mpz_set_str(premaster_secret_mpz, premaster, 10);
 	// perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
 	// ps_msg *encrypted_ps_message;
@@ -266,11 +264,12 @@ int main(int argc, char **argv) {
 	
 	//  =============== [Receive] E_client_public_key (Master Secret) ================
 	ps_msg encrypted_server_ms_message;
-	mpz_t decrypted_ms, master_secret_test, master_secret_mpz;
-	unsigned long long master_secret_long;
-
-	unsigned char master_secret[SHA_BLOCK_SIZE];
+	mpz_t decrypted_ms;
 	mpz_t master_secret_mpz;
+	unsigned long long master_secret_long;
+	unsigned char master_secret[SHA_BLOCK_SIZE];
+	int result;
+
 	memset(&encrypted_server_ms_message, 0, sizeof(ps_msg));
 	mpz_init(decrypted_ms);
 	memset(master_secret, 0, SHA_BLOCK_SIZE);
@@ -285,16 +284,15 @@ int main(int argc, char **argv) {
 	compute_master_secret(premaster_secret, client_random, server_random, master_secret);
 	char* master_secret_str = hex_to_str(master_secret, SHA_BLOCK_SIZE);
 	mpz_set_str(master_secret_mpz, master_secret_str, 16);
-	gmp_printf("master_secret_mpz: %Zd\n", master_secret_mpz);
-	gmp_printf("decrypted_ms: %Zd\n", decrypted_ms);
-	int result = mpz_cmp(master_secret_mpz, decrypted_ms);
-
+	// gmp_printf("master_secret_mpz: %Zd\n", master_secret_mpz);
+	// gmp_printf("decrypted_ms: %Zd\n", decrypted_ms);
+	result = mpz_cmp(master_secret_mpz, decrypted_ms);
 	if (result != 0) {
 		perror("Decrypted server master secret doesn't match computed master secret!");
 		cleanup();
 	}
 
-	printf("result: %d\n", result);
+	//printf("result: %d\n", result);
 	free(master_secret_str);
 	// ********************************************************************
 	// ********************************************************************
@@ -327,8 +325,8 @@ int main(int argc, char **argv) {
 		tv.tv_sec = 2;
 		tv.tv_usec = 10;
 
+		fflush(stdin);
 		select(sockfd+1, &readfds, NULL, NULL, &tv);
-		//printf("Ready\n");
 		if (FD_ISSET(STDIN_FILENO, &readfds)) {
 			counter = 0;
 			memset(&send_msg, 0, TLS_MSG_SIZE);
@@ -354,6 +352,7 @@ int main(int argc, char **argv) {
 			memset(&rcv_msg, 0, TLS_MSG_SIZE);
 			memset(rcv_ciphertext, 0, AES_BLOCK_SIZE);
 			read_size = read(sockfd, &rcv_msg, TLS_MSG_SIZE);
+			
 			if (read_size > 0) {
 				if (rcv_msg.type != ENCRYPTED_MESSAGE) {
 					goto out;
@@ -366,6 +365,7 @@ int main(int argc, char **argv) {
 					counter += AES_BLOCK_SIZE;
 					memcpy(rcv_ciphertext, rcv_msg.msg+counter, AES_BLOCK_SIZE);
 				}
+				fflush(stdout);
 			}
 		}
 
@@ -385,7 +385,6 @@ out:
 	mpz_clear(premaster_secret_mpz);
 	mpz_clear(decrypted_ms);
 	mpz_clear(master_secret_mpz);
-	mpz_clear(master_secret_test);
 	return 0;
 }
 
@@ -472,7 +471,6 @@ compute_master_secret(int ps, int client_random, int server_random, char *master
 	sha256_final(&ctx, (unsigned char*) master_secret);
 }
 
-
 /*
  * \brief                  Sends a message to the connected server.
  *                         Returns an error code.
@@ -529,7 +527,7 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 	 	return ERR_FAILURE;
 	}
 	int *msg_type_int = msg;
-	printf("Message Type: %d\n", *msg_type_int);
+	// printf("Message Type: %d\n", *msg_type_int);
 	if (msg_type != *msg_type_int) {
 		return ERR_FAILURE;
 	}
