@@ -1,0 +1,49 @@
+﻿My name: Jinge Zhang
+My SID: 23857461
+My section: Section 105
+My TA: Arjun Baokar
+
+Partner name: Xinran Guo
+Partner SID: 24718837
+Partner section: Section 102
+Partner TA: Neil Gong
+
+
+1. 
+The attacker could intercept the client_hello message and change the type to something else like ERROR_MESSAGE and send it to the server so that the server would send back an ERROR_MESSAGE to the client that the connections fails. Then, we assume client would keep trying to send his or her client_hello message if the client keeps receive ERROR_MESSAGE since the client would think he or she fails to connect with the server. Thus, as the client keeps sending the hello_message and the attacker keeps changing its type to something else, the server would use up all of its service and terminate. So we succeed in Dos Attack on the client.
+
+2. 
+- “Random number" chosen by taking advantage of  `srand(time(NULL))`, time(NULL) set the seed of “srand” (Pseudo-Random Number Generator) based on the current time in second.
+- Yes, attacker knows the seed of PRNG is based on time of calling random_int(). As long as attacker observe the time that client call random_int(), they can pass that time to generate the same random number, which means attacker get chance to know client generate “premaster secret” in TLS protocol.
+- MITM: Suppose attacker know our master secret generate formula (Master Secret = H(PS||clienthello.random||serverhello.random||PS))
+Since “client hello” and “server hello” are not encrypted, MITM can easily get client_random and server_random by extract server hello and client hello package. In addition, as we observe, “server_random” (server send to client) and “premaster secret” (client call random_int() to generate) are mostly the same. it indicates that attacker have high possibility to guess correct premaster secret. Knowing master secret generate formula, attacker can easily calculate master secret and break our encryption.
+
+3. 
+Since TLS protocol we implemented has a type field sent in plaintext, and “client hello” message and “server hello” message are not encrypted. Suppose a man in the middle in the client-server connection, they can do following actions,
+	1. Client sends “client hello” with cipher suites they want to communicate with server.
+	2. Attacker can extract that “client hello” by checking message type if equal to “CLIENT_HELLO 0x1”
+	3. Then attacker can check if the cipher suite in “client hello” message is weaker one they want.
+	4. If not, they can simply drop “client hello” and create a fake server error message ( probably states error occurred by compatibility of cipher suites) to terminate the connection between client and server
+	5. Client will attempt to connect by sending client hello again and probably using different cipher suite.
+	6. Attacker keeps checking and dropping those “client hello” messages until they see client use the weak cipher suite they want. then they pass this “client hello” to server.
+Above scenario shows one of possible downgrade attacks that attacker can successfully force client to downgrade to weak cipher suite.
+
+Suggested adaptation:
+Suppose attacker can force the client to use downgrade cipher suite to do first four steps of handshake (i.e. Client hello, Server Hello, Client certificate, and Server Certificate)
+After client received “Server Certificate”,  we can add additional steps to attempt to upgrade cipher suite by using RSA with server_public_key to encrypt the stronger cipher suite [i.e. E_server_public_key (stronger Cipher Suite)]. We configure the server such that it only accepts the most recent compatible protocol version for every client, respectively. Thus, the rest of the handshake steps would use the stronger cipher suite.
+
+4. (Extra Credit)
+(1). Attacker in the middle of client-server handshake process can create some fake ERROR_MESSAGE (message type = 0x01) and send to the server such that server would output “unexpected message” that will terminate client-server connection.
+[Fix]: Server wait amount of time if the expect message arrive
+
+(2). Attacker can create large amount of different client_hello messages by generating different random numbers at same time, which start a DoS attack to server.
+[Fix]: Defect the ip address that sending lots of client_hello message, and default block those connect request.
+
+(3). Do MITM on client certificate such that attacker can send the its own certificate to do the rest of the handshake, given the information that the attacker could know the time when client sends its client_hello and when receives the server_hello to generate the client_random and server_random accordingly.
+[Fix]: We can modify the handshake step on sending client certificate such that we sign the client certificate by CA and send it the server, where server asks CA to decrypt that message and check whether the decryption of that message is the client certificate. The server sends the server certificate to the client if it is exactly the client certificate.
+
+(4). Attacker can replay the same message(i.e. a request to transfer money) by keeping sending it.
+[Fix]: Every time after the client sends a message to the server, the client should be forced to re-authenticate its identity by starting the handshake on the step where client sends E_server_public_key(Premaster Secret).
+
+(5) We observe client random, sever random, premaster secret are the same sometime, and sever random and premaster secret are almost always the same. it is because random_int() changes seed base on current time. TLS handshake can be completed within one second, it has high possibility to generate the same random number, which is big issue for this protocol.
+[Fix]: before we call random_int(), add method to let program sleep 1~2 second to make sure we have different seed for srand.

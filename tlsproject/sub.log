@@ -1,0 +1,93 @@
+Last login: Tue Nov 18 20:18:57 on ttys000
+airbears2-10-142-152-197:~ jingezhang$ ssh cs161-hc@hive11.cs.berkeley.edu
+cs161-hc@hive11.cs.berkeley.edu's password: 
+Welcome to Ubuntu 12.04.4 LTS (GNU/Linux 3.2.0-61-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com/
+
+New release '14.04.1 LTS' available.
+Run 'do-release-upgrade' to upgrade to it.
+
+Last login: Tue Nov 18 20:19:00 2014 from airbears2-10-142-152-197.airbears2.1918.berkeley.edu
+
+'cs161-hc' is using 111/2048 MB (5%) of its disk quota on /home/cc.
+
+'cs161-hc' is using 0/20971 MB (0%) of its disk quota on /home/tmp.
+
+(Type 'more /share/b/pub/disk.quotas' for more information.)
+
+hive11 [501] ~ # cd TLS-Implementation/
+hive11 [502] ~/TLS-Implementation # cd tlsproject/
+hive11 [503] ~/TLS-Implementation/tlsproject # make
+gcc -W aes.c sha256.c client.c -o client -lgmp
+hive11 [504] ~/TLS-Implementation/tlsproject # ./client -i 54.148.53.246 -c client_cert.crt -d client_private.key -m client_modulus.key 
+hello
+^C
+hive11 [505] ~/TLS-Implementation/tlsproject # ./client -i 54.148.53.246 -c client_cert.crt -d client_private.key -m client_modulus.key 
+hellow
+Hooray!
+few
+Hooray!
+fewf
+Hooray!
+we
+Hooray!
+fw
+eHooray!
+f
+Hooray!
+we
+fHooray!
+w
+eHooray!
+f
+wHooray!
+ef
+ewHooray!
+
+fHooray!
+we
+Hooray!
+f
+wHooray!
+e^C
+hive11 [506] ~/TLS-Implementation/tlsproject # mkdir submit
+hive11 [507] ~/TLS-Implementation/tlsproject # cp client.c tlsproj.txt submit/
+hive11 [508] ~/TLS-Implementation/tlsproject # cd submit/
+hive11 [509] ~/TLS-Implementation/tlsproject/submit # ls -all
+total 44
+drwx------ 2 cs161-hc cs161  4096 Nov 18 20:37 .
+drwx------ 4 cs161-hc cs161  4096 Nov 18 20:37 ..
+-rw------- 1 cs161-hc cs161 21939 Nov 18 20:37 client.c
+-rw------- 1 cs161-hc cs161  5938 Nov 18 20:37 tlsproj.txt
+hive11 [510] ~/TLS-Implementation/tlsproject/submit # submit tlsproj
+Please enter the logins of your partner(s), if any.
+Enter '.' to stop.
+Login: cs161-iz
+Login: .
+Your partners' logins are cs161-iz 
+Is this correct? [yes/no] yes
+Created MY.PARTNERS file.
+Looking for files to turn in....
+Submitting client.c.
+Submitting tlsproj.txt.
+The files you have submitted are:
+	./MY.PARTNERS ./client.c ./tlsproj.txt 
+Is this correct? [yes/no] yes
+Copying submission of assignment tlsproj....
+Submitted entry for partner cs161-iz.
+Submission complete.
+hive11 [511] ~/TLS-Implementation/tlsproject/submit # glookup -t
+Submissions for cs161-hc (lateness in [+dd:hh:mm]):
+         hw1: Tue Sep 16 12:15:00, Tue Sep 16 12:55:00
+         hw2: Tue Sep 23 01:36:00
+         hw3: Sun Sep 28 22:55:00, Tue Sep 30 14:17:00
+         hw4: Wed Oct 22 05:26:00, Wed Oct 22 09:25:00
+         hw5: Tue Oct 28 13:43:00, Tue Oct 28 14:01:00
+              Tue Oct 28 14:54:00
+         hw6: Tue Nov  4 13:52:00, Tue Nov  4 13:59:00
+       proj0: Sat Sep 20 22:37:00, Sun Sep 21 16:40:00
+     tlsproj: Tue Nov 18 18:57:00, Tue Nov 18 20:37:00
+
+hive11 [512] ~/TLS-Implementation/tlsproject/submit # 
+
