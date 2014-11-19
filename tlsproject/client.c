@@ -148,7 +148,6 @@ int main(int argc, char **argv) {
   memset(&client_hello_message, 0, HELLO_MSG_SIZE);
 
   client_random = random_int();
-  // printf("client_random: %d\n", client_random);
   client_hello_message.type = CLIENT_HELLO;
   client_hello_message.random = client_random;
   client_hello_message.cipher_suite = TLS_RSA_WITH_AES_128_ECB_SHA256;
@@ -172,7 +171,6 @@ int main(int argc, char **argv) {
     perror("[different cipher_suite]: cipher suites doesn't match");
     cleanup();
   }
-  //printf("server_random: %d\n", server_random);
 
   //  =============== [Send] Client Certificate ================
   mpz_t client_certificate_mpz;
@@ -183,7 +181,6 @@ int main(int argc, char **argv) {
   memset(&client_certificate, 0, CERT_MSG_SIZE);
   client_certificate.type = CLIENT_CERTIFICATE;
   fread(client_certificate.cert, RSA_MAX_LEN, 1, c_file);
-  //printf("Client Certificate: %s\n", client_certificate.cert);
   feedback = send_tls_message(sockfd, &client_certificate, CERT_MSG_SIZE);
   if (feedback != ERR_OK){
     perror("[CLIENT CERTIFICATE]: can't send tls message");
@@ -235,7 +232,7 @@ int main(int argc, char **argv) {
   // Construct encrypted(premaster secret)
   mpz_t premaster_secret_encrypted, premaster_secret_mpz;
   int premaster_secret;
-  char premaster[16];
+  char premaster[SHA_BLOCK_SIZE];
   ps_msg encrypted_ps_message;
   mpz_init(premaster_secret_encrypted);
   mpz_init(premaster_secret_mpz); 
@@ -264,7 +261,7 @@ int main(int argc, char **argv) {
   // gmp_printf("server_public_key_modulus: %Zx\n", server_public_key_modulus);
   perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
   encrypted_ps_message.type = PREMASTER_SECRET;
-  mpz_get_str(encrypted_ps_message.ps, 16, premaster_secret_encrypted);
+  mpz_get_str(encrypted_ps_message.ps, HEX_BASE, premaster_secret_encrypted);
   feedback = send_tls_message(sockfd, &encrypted_ps_message, PS_MSG_SIZE);
   if (feedback != ERR_OK) {
     perror("[E_server_public_key (Premaster secret)]: can't send tls message");
@@ -291,7 +288,7 @@ int main(int argc, char **argv) {
   decrypt_verify_master_secret(decrypted_ms, &encrypted_server_ms_message, client_exp, client_mod);
   compute_master_secret(premaster_secret, client_random, server_random, master_secret);
   char* master_secret_str = hex_to_str(master_secret, SHA_BLOCK_SIZE);
-  mpz_set_str(master_secret_mpz, master_secret_str, 16);
+  mpz_set_str(master_secret_mpz, master_secret_str, HEX_BASE);
   result = mpz_cmp(master_secret_mpz, decrypted_ms);
   if (result != 0) {
     perror("Decrypted server master secret doesn't match computed master secret!");
@@ -321,8 +318,8 @@ int main(int argc, char **argv) {
   // YOUR CODE HERE
   // SET AES KEYS
 
-  aes_setkey_enc(&enc_ctx, master_secret, 128);
-  aes_setkey_dec(&dec_ctx, master_secret, 128);
+  aes_setkey_enc(&enc_ctx, master_secret, AES_BLOCK_SIZE * BYTE_SIZE);
+  aes_setkey_dec(&dec_ctx, master_secret, AES_BLOCK_SIZE * BYTE_SIZE);
 
   fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
   /* Send and receive data. */
@@ -434,7 +431,7 @@ decrypt_verify_master_secret(mpz_t decrypted_ms, ps_msg *ms_ver, mpz_t key_exp, 
   // YOUR CODE HERE
   mpz_t premaster;
   mpz_init(premaster);
-  mpz_set_str(premaster, ms_ver->ps, 16);
+  mpz_set_str(premaster, ms_ver->ps, SHA_BLOCK_SIZE);
   perform_rsa(decrypted_ms, premaster, key_exp, key_mod);
   mpz_clear(premaster);
 }
@@ -458,7 +455,6 @@ compute_master_secret(int ps, int client_random, int server_random, unsigned cha
   unsigned char data1[sizeof(int)];
   unsigned char data2[sizeof(int)];
   unsigned char data3[sizeof(int)];
-  char master_secret0[16], master_secret1[16], master_secret2[16], master_secret3[16];
 
   memcpy(data, &ps, sizeof(ps));
   sha256_update(&ctx, data, (int) sizeof(data));
@@ -558,7 +554,7 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 static void
 perform_rsa(mpz_t result, mpz_t message, mpz_t d, mpz_t n)
 {
-  int hex = 16;
+  int hex = HEX_BASE;
   mpz_t zero, one, two, tmp;
   char zero_str[] = "0";
   char one_str[] = "1";
