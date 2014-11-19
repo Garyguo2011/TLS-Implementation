@@ -10,7 +10,7 @@
  */
 
 #include "client.h"
-
+#include <unistd.h>
 /* The file descriptor for the socket connected to the server. */
 static int sockfd;
 
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
 	memset(&client_hello_message, 0, sizeof(hello_message));
 
 	client_random = random_int();
-	// printf("client_random: %d\n", client_random);
+	printf("client_random: %d\n", client_random);
 	client_hello_message.type = CLIENT_HELLO;
 	client_hello_message.random = client_random;
 	client_hello_message.cipher_suite = TLS_RSA_WITH_AES_128_ECB_SHA256;
@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
 		cleanup();		
 	}
 	server_random = server_hello_message.random;
-	//printf("server_random: %d\n", server_random);
+	printf("server_random: %d\n", server_random);
 
 	//  =============== [Send] Client Certificate ================
 	mpz_t client_certificate_mpz;
@@ -234,8 +234,9 @@ int main(int argc, char **argv) {
 	memset(&encrypted_ps_message, 0, sizeof(ps_msg));
 	
 	// Generate and Covert Premaster Secret to mpz
+	sleep(3);
 	premaster_secret = random_int();
-	//printf("premaster_secret: %d\n", premaster_secret);
+	printf("premaster_secret: %d\n", premaster_secret);
 	sprintf(premaster, "%d", premaster_secret);
 	mpz_set_str(premaster_secret_mpz, premaster, 10);
 	// perform_rsa(premaster_secret_encrypted, premaster_secret_mpz, server_public_key_exponent, server_public_key_modulus);
@@ -285,99 +286,18 @@ int main(int argc, char **argv) {
 	char* master_secret_str = hex_to_str(master_secret, SHA_BLOCK_SIZE);
 	mpz_set_str(master_secret_mpz, master_secret_str, 16);
 	result = mpz_cmp(master_secret_mpz, decrypted_ms);
+	printf("%d", result);
 	if (result != 0) {
 		perror("Decrypted server master secret doesn't match computed master secret!");
 		cleanup();
 	}
-
+	if (client_random != premaster_secret && server_random != premaster_secret){
+		//printf("1\n");
+	}else{
+		//printf("0\n");
+	}
 	//printf("result: %d\n", result);
 	free(master_secret_str);
-	// ********************************************************************
-	// ********************************************************************
-	// ********************************************************************
-	/*
-	 * START ENCRYPTED MESSAGES
-	 */
-
-	memset(send_plaintext, 0, AES_BLOCK_SIZE);
-	memset(send_ciphertext, 0, AES_BLOCK_SIZE);
-	memset(rcv_plaintext, 0, AES_BLOCK_SIZE);
-	memset(rcv_ciphertext, 0, AES_BLOCK_SIZE);
-
-	memset(&rcv_msg, 0, TLS_MSG_SIZE);
-
-	aes_init(&enc_ctx);
-	aes_init(&dec_ctx);
-	
-	// YOUR CODE HERE
-	// SET AES KEYS
-	aes_setkey_enc(&enc_ctx, master_secret, 128);
-	aes_setkey_dec(&dec_ctx, master_secret, 128);
-	// printf("1\n");
-	fcntl(STDIN_FILENO, F_SETFL, O_NONBLOCK);
-	//printf("I'm here\n");
-	/* Send and receive data. */
-	while (1) {
-		FD_ZERO(&readfds);
-		FD_SET(STDIN_FILENO, &readfds);
-		FD_SET(sockfd, &readfds);
-		// printf("2\n");
-		tv.tv_sec = 2;
-		tv.tv_usec = 10;
-
-		fflush(stdin);
-		select(sockfd+1, &readfds, NULL, NULL, &tv);
-		if (FD_ISSET(STDIN_FILENO, &readfds)) {
-			counter = 0;
-			memset(&send_msg, 0, TLS_MSG_SIZE);
-			// printf("3\n");
-			send_msg.type = ENCRYPTED_MESSAGE;
-			memset(send_plaintext, 0, AES_BLOCK_SIZE);
-			read_size = read(STDIN_FILENO, send_plaintext, AES_BLOCK_SIZE);
-			//printf("send_plaintext: %s\n", send_plaintext);
-			while (read_size > 0 && (unsigned int) counter + AES_BLOCK_SIZE < TLS_MSG_SIZE - INT_SIZE) {
-				if (read_size > 0) {
-					err = aes_crypt_ecb(&enc_ctx, AES_ENCRYPT, send_plaintext, send_ciphertext);
-					memcpy(send_msg.msg + counter, send_ciphertext, AES_BLOCK_SIZE);
-					// printf("4\n");
-					counter += AES_BLOCK_SIZE;
-				}
-				memset(send_plaintext, 0, AES_BLOCK_SIZE);
-				read_size = read(STDIN_FILENO, send_plaintext, AES_BLOCK_SIZE);
-			}
-			// printf("5\n");
-			write_size = write(sockfd, &send_msg, INT_SIZE+counter+AES_BLOCK_SIZE);
-			if (write_size < 0) {
-				perror("Could not write to socket");
-				cleanup();
-			}
-		} else if (FD_ISSET(sockfd, &readfds)) {
-			memset(&rcv_msg, 0, TLS_MSG_SIZE);
-			memset(rcv_ciphertext, 0, AES_BLOCK_SIZE);
-			read_size = read(sockfd, &rcv_msg, TLS_MSG_SIZE);
-			
-			if (read_size > 0) {
-				if (rcv_msg.type != ENCRYPTED_MESSAGE) {
-					goto out;
-				}
-				memcpy(rcv_ciphertext, rcv_msg.msg, AES_BLOCK_SIZE);
-				// printf("6\n");
-				counter = 0;
-				while ((unsigned int) counter < read_size - INT_SIZE - AES_BLOCK_SIZE) {
-					aes_crypt_ecb(&dec_ctx, AES_DECRYPT, rcv_ciphertext, rcv_plaintext);
-					printf("%s", rcv_plaintext);
-					counter += AES_BLOCK_SIZE;
-					memcpy(rcv_ciphertext, rcv_msg.msg+counter, AES_BLOCK_SIZE);
-					// printf("7\n");
-				}
-				fflush(stdout);
-				printf("\n");
-			}
-		}
-
-	}
-
-out:
 	close(sockfd);
 	mpz_clear(client_exp);
 	mpz_clear(client_mod);
@@ -391,6 +311,7 @@ out:
 	mpz_clear(premaster_secret_mpz);
 	mpz_clear(decrypted_ms);
 	mpz_clear(master_secret_mpz);
+	cleanup();
 	return 0;
 }
 
@@ -488,7 +409,7 @@ send_tls_message(int socketno, void *msg, int msg_len)
 	// YOUR CODE HERE
 	int n = 0;
 	n = write(socketno, msg, (size_t) msg_len);
-	if (n < 0 || n != msg_len){
+	if (n < 0){
 	 	return ERR_FAILURE;
 	}else{
 	 	return ERR_OK;
@@ -515,23 +436,18 @@ receive_tls_message(int socketno, void *msg, int msg_len, int msg_type)
 	// Need while loop here
 	void *msg_ptr = msg;
 	int remain_bytes = msg_len;
-	int receive_bype = 0;
 	while (remain_bytes > MAX_RECEIVE_BYTES){
 		n = read(socketno, msg_ptr, MAX_RECEIVE_BYTES);
 		if (n < 0){
 	 		return ERR_FAILURE;
 	 	}
-	 	receive_bype += n;
-	 	remain_bytes -= n;
-	 	msg_ptr += n;
+	 	remain_bytes -= MAX_RECEIVE_BYTES;
+	 	msg_ptr += MAX_RECEIVE_BYTES;
 	}
 	n = read(socketno, msg_ptr, (size_t) remain_bytes);
+	msg_ptr = NULL;
 	if (n < 0){
 	 	return ERR_FAILURE;
-	}
-	receive_bype += n;
-	if (receive_bype != msg_len){
-		return ERR_FAILURE;
 	}
 	int *msg_type_int = msg;
 	if (msg_type != *msg_type_int) {
@@ -602,6 +518,7 @@ static int
 random_int()
 {
 	srand(time(NULL));
+	//srand(1);
 	return rand();
 }
 
